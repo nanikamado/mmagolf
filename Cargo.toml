@@ -1,0 +1,13 @@
+[package]
+name = "mmagolf"
+version = "0.1.0"
+edition = "2021"
+description = "Submitting tool for MMA Golf"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "3.1.10", features = ["derive"] }
+json = "0.12.4"
+base64 = "0.13.0"
+atty = "0.2.14"
