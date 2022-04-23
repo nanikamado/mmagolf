@@ -41,9 +41,9 @@ enum Commands {
 }
 
 #[cfg(not(feature = "localhost_server"))]
-const SERVER_ADDRESS: &'static str = "atlas";
+const SERVER_ADDRESS: &str = "atlas";
 #[cfg(feature = "localhost_server")]
-const SERVER_ADDRESS: &'static str = "localhost";
+const SERVER_ADDRESS: &str = "localhost";
 
 #[tokio::main]
 async fn main() {
@@ -54,18 +54,18 @@ async fn main() {
             lang,
             problem_number,
         } => {
-            let code = read_to_string(&mut code.clone()).unwrap_or_else(|e| {
+            let code = read_to_string(&code).unwrap_or_else(|e| {
                 eprintln!("{}: {}", code, e);
                 exit(1)
             });
-            let ws_stream = connect_to_server(&SERVER_ADDRESS);
+            let ws_stream = connect_to_server(SERVER_ADDRESS);
             let (sender, receiver) = channel(100);
             let submission = submit(lang, problem_number, code, ws_stream.await, sender);
             let display_result = display_result(receiver);
             future::join(submission, display_result).await;
         }
         Commands::Codetest { code, lang } => {
-            let code = read_to_string(&mut code.clone()).unwrap_or_else(|e| {
+            let code = read_to_string(&code).unwrap_or_else(|e| {
                 eprintln!("{}: {}", code, e);
                 exit(1)
             });
@@ -83,7 +83,7 @@ async fn main() {
                     input
                 })
             };
-            let ws_stream = connect_to_server(&SERVER_ADDRESS).await;
+            let ws_stream = connect_to_server(SERVER_ADDRESS).await;
             codetest(lang, code, input, ws_stream).await;
         }
     }
@@ -135,9 +135,9 @@ impl Display for JudgeStatus {
 }
 
 impl JudgeStatus {
-    fn to_string_with_emoji(&self) -> String {
+    fn to_string_with_emoji(self) -> String {
         match self {
-            &JudgeStatus::Ac(t) => format!("{} 🎉", JudgeStatus::Ac(t)),
+            JudgeStatus::Ac(t) => format!("{} 🎉", JudgeStatus::Ac(t)),
             s => format!("{s}"),
         }
     }
