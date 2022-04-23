@@ -40,10 +40,14 @@ enum Commands {
     },
 }
 
+#[cfg(not(feature = "localhost_server"))]
+const SERVER_ADDRESS: &'static str = "atlas";
+#[cfg(feature = "localhost_server")]
+const SERVER_ADDRESS: &'static str = "localhost";
+
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
-    let server_address = std::env::var("MMA_GOLF_SERVER").unwrap_or("atlas".to_string());
     match args.command {
         Commands::Submit {
             code,
@@ -54,7 +58,7 @@ async fn main() {
                 eprintln!("{}: {}", code, e);
                 exit(1)
             });
-            let ws_stream = connect_to_server(&server_address);
+            let ws_stream = connect_to_server(&SERVER_ADDRESS);
             let (sender, receiver) = channel(100);
             let submission = submit(lang, problem_number, code, ws_stream.await, sender);
             let display_result = display_result(receiver);
@@ -79,7 +83,7 @@ async fn main() {
                     input
                 })
             };
-            let ws_stream = connect_to_server(&server_address).await;
+            let ws_stream = connect_to_server(&SERVER_ADDRESS).await;
             codetest(lang, code, input, ws_stream).await;
         }
     }
