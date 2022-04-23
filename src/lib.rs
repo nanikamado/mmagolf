@@ -26,6 +26,9 @@ pub enum ReternMessage {
     NotSuchProblem {
         problem_number: usize,
     },
+    NotSuchLang {
+        lang: String,
+    },
 }
 
 pub async fn submit(

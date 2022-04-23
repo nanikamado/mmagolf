@@ -194,6 +194,10 @@ async fn display_result(mut receiver: Receiver<ReternMessage>) {
             println!("Not such problem: {problem_number}");
             return;
         }
+        Some(ReternMessage::NotSuchLang { lang }) => {
+            println!("Not such language: {lang}");
+            return;
+        }
         r => panic!("{:?}", r),
     };
     let mut judge_statuses = vec![JudgeStatus::Wj; number_of_cases];
