@@ -1,2 +1,2 @@
 # mmagolf
-Submitting tool for MMA Golf
+MMAで開催される予定のコードゴルフ大会でコードを提出するためのコマンド
