@@ -103,7 +103,7 @@ pub async fn codetest(
                         if killed {
                             println!("TLEです。");
                         }
-                        println!("time: {time}\nresult:");
+                        println!("time: {time} ms\nresult:");
                         tokio::io::stdout()
                             .write_all(&base64::decode(stdout).unwrap())
                             .await
