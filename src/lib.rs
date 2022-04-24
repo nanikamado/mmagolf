@@ -3,7 +3,9 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::{io::AsyncWriteExt, net::TcpStream, sync::mpsc::Sender};
 use tokio_tungstenite::{
-    connect_async, tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream,
+    connect_async,
+    tungstenite::{self, protocol::Message},
+    MaybeTlsStream, WebSocketStream,
 };
 
 #[derive(Debug, Deserialize)]
@@ -98,7 +100,9 @@ pub async fn codetest(
         .await;
 }
 
-pub async fn connect_to_server(server_address: &str) -> WebSocketStream<MaybeTlsStream<TcpStream>> {
+pub async fn connect_to_server(
+    server_address: &str,
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, tungstenite::Error> {
     let url = url::Url::parse(&format!("ws://{}:5620", server_address)).unwrap();
-    connect_async(url).await.expect("Failed to connect").0
+    Ok(connect_async(url).await?.0)
 }

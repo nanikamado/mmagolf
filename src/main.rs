@@ -48,6 +48,26 @@ const SERVER_ADDRESS: &str = "localhost";
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
+    let ws_stream = connect_to_server(SERVER_ADDRESS).await.unwrap_or_else(|e| {
+        use tokio_tungstenite::tungstenite::Error::*;
+        match e {
+            Io(e) => {
+                eprintln!(
+                    "ジャッジサーバーに接続できませんでした。\
+                ジャッジサーバーが動いていないかもしれません。{}",
+                    e
+                );
+                exit(1);
+            }
+            _ => {
+                eprintln!(
+                    "ジャッジサーバーに接続できませんでした。原因はよくわかりません。:{}",
+                    e
+                );
+                exit(1);
+            }
+        }
+    });
     match args.command {
         Commands::Submit {
             code,
@@ -58,9 +78,8 @@ async fn main() {
                 eprintln!("{}: {}", code, e);
                 exit(1)
             });
-            let ws_stream = connect_to_server(SERVER_ADDRESS);
             let (sender, receiver) = channel(100);
-            let submission = submit(lang, problem_number, code, ws_stream.await, sender);
+            let submission = submit(lang, problem_number, code, ws_stream, sender);
             let display_result = display_result(receiver);
             future::join(submission, display_result).await;
         }
@@ -83,7 +102,6 @@ async fn main() {
                     input
                 })
             };
-            let ws_stream = connect_to_server(SERVER_ADDRESS).await;
             codetest(lang, code, input, ws_stream).await;
         }
     }
