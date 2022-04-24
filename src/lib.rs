@@ -18,8 +18,10 @@ pub enum ReternMessage {
         killed: bool,
     },
     CodetestResult {
-        result: Vec<u8>,
+        stdout: String,
+        stderr: String,
         time: u64,
+        killed: bool,
     },
     NumberOfTestCases {
         n: usize,
@@ -89,12 +91,39 @@ pub async fn codetest(
     ws_stream
         .for_each(|message| async {
             let message = message.unwrap();
-            if let Message::Text(data) = message {
-                let v: serde_json::map::Map<_, _> = serde_json::from_str(&data).unwrap();
-                tokio::io::stdout()
-                    .write_all(&base64::decode(v["result"].as_str().unwrap()).unwrap())
-                    .await
-                    .unwrap();
+            if let Message::Text(message) = message {
+                let data: ReternMessage = serde_json::from_str(&message).unwrap();
+                match data {
+                    ReternMessage::CodetestResult {
+                        stdout,
+                        time,
+                        stderr,
+                        killed,
+                    } => {
+                        if killed {
+                            println!("TLEです。");
+                        }
+                        println!("time: {time}\nresult:");
+                        tokio::io::stdout()
+                            .write_all(&base64::decode(stdout).unwrap())
+                            .await
+                            .unwrap();
+                        tokio::io::stderr()
+                            .write_all(&base64::decode(stderr).unwrap())
+                            .await
+                            .unwrap();
+                    }
+                    ReternMessage::NotSuchLang { lang } => {
+                        println!("Not such language: {lang}");
+                        return;
+                    }
+                    _ => panic!("{:?}", data),
+                }
+                // let v: serde_json::map::Map<_, _> = serde_json::from_str(&data).unwrap();
+                // tokio::io::stdout()
+                //     .write_all(&base64::decode(v["result"].as_str().unwrap()).unwrap())
+                //     .await
+                //     .unwrap();
             }
         })
         .await;
