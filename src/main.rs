@@ -275,16 +275,16 @@ async fn display_result(mut receiver: Receiver<ReternMessage>, size: usize) -> O
 }
 
 const NUMBER_OF_PROBLEMS: usize = 3;
+const HOME_DIR: &str = env!("HOME");
 
 async fn get_submission_list() -> (Vec<Vec<Submission>>, File) {
-    fs::create_dir_all(dirs::data_local_dir().unwrap().join("mmagolf"))
-        .await
-        .unwrap();
+    let data_dir = std::path::Path::new(HOME_DIR).join(".local/share/mmagolf");
+    fs::create_dir_all(&data_dir).await.unwrap();
     let mut file = OpenOptions::new()
         .append(true)
         .read(true)
         .create(true)
-        .open(dirs::data_local_dir().unwrap().join("mmagolf/submissions"))
+        .open(data_dir.join("submissions"))
         .await
         .unwrap();
     let mut s = String::new();
