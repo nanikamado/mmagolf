@@ -1,3 +1,6 @@
+use std::fmt::Display;
+
+use chrono::prelude::*;
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::json;
@@ -36,9 +39,9 @@ pub enum ReternMessage {
 }
 
 pub async fn submit(
-    lang: String,
+    lang: &str,
     problem_number: usize,
-    code: String,
+    code: &str,
     mut ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
     sender: Sender<ReternMessage>,
 ) {
@@ -134,4 +137,45 @@ pub async fn connect_to_server(
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, tungstenite::Error> {
     let url = url::Url::parse(&format!("ws://{}:5620", server_address)).unwrap();
     Ok(connect_async(url).await?.0)
+}
+
+#[derive(Debug, Clone)]
+pub struct Submission {
+    pub size: usize,
+    pub problem: usize,
+    pub lang: String,
+    pub time: DateTime<Utc>,
+    pub user: String,
+}
+
+impl Submission {
+    pub fn from_str(s: &str) -> Option<Self> {
+        let mut s = s.split_whitespace();
+        let size = s.next()?.parse::<usize>().ok()?;
+        let problem = s.next()?.parse::<usize>().ok()?;
+        let lang = s.next()?.to_string();
+        let time = Utc.timestamp(s.next()?.parse::<i64>().ok()?, 0);
+        let user = s.next()?.to_string();
+        Some(Submission {
+            size,
+            problem,
+            lang,
+            time,
+            user,
+        })
+    }
+}
+
+impl Display for Submission {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {} {} {} {}",
+            self.size,
+            self.problem,
+            self.lang,
+            self.time.timestamp(),
+            self.user
+        )
+    }
 }

@@ -1,10 +1,15 @@
+use chrono::prelude::*;
 use clap::{Parser, Subcommand};
 use erase_output::Erase;
-use futures_util::future;
-use mmagolf::{codetest, connect_to_server, submit, ReternMessage};
+use mmagolf::{codetest, connect_to_server, submit, ReternMessage, Submission};
 use std::{fmt::Display, fs::read_to_string, io::Read, iter, process::exit};
 use termion::{color, style};
-use tokio::sync::mpsc::{channel, Receiver};
+use tokio::{
+    fs::{self, File, OpenOptions},
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::mpsc::{channel, Receiver},
+};
+use users::{get_current_uid, get_user_by_uid};
 
 #[derive(Debug, Parser)]
 #[clap(version, about, long_about = None)]
@@ -74,14 +79,37 @@ async fn main() {
             lang,
             problem_number,
         } => {
+            let submission_list = get_submission_list();
             let code = read_to_string(&code).unwrap_or_else(|e| {
                 eprintln!("{}: {}", code, e);
                 exit(1)
             });
+            let s = &Submission {
+                size: code.len(),
+                problem: problem_number,
+                lang,
+                time: Utc::now(),
+                user: get_user_by_uid(get_current_uid())
+                    .unwrap()
+                    .name()
+                    .to_string_lossy()
+                    .to_string(),
+            };
             let (sender, receiver) = channel(100);
-            let submission = submit(lang, problem_number, code, ws_stream, sender);
-            let display_result = display_result(receiver);
-            future::join(submission, display_result).await;
+            let submission = submit(&s.lang, problem_number, &code, ws_stream, sender);
+            let display_result = display_result(receiver, s.size);
+            let (_, result, (problems, mut file)) =
+                futures::join!(submission, display_result, submission_list);
+            if matches!(result, Some(JudgeStatus::Ac(_))) {
+                file.write_all(format!("{}\n", s).as_bytes()).await.unwrap();
+                match problems[problem_number - 1]
+                    .get(0)
+                    .map(|shortest| s.size < shortest.size)
+                {
+                    None | Some(true) => println!("Shortest! 🎉"),
+                    _ => (),
+                }
+            }
         }
         Commands::Codetest { code, lang } => {
             let code = read_to_string(&code).unwrap_or_else(|e| {
@@ -152,15 +180,6 @@ impl Display for JudgeStatus {
     }
 }
 
-impl JudgeStatus {
-    fn to_string_with_emoji(self) -> String {
-        match self {
-            JudgeStatus::Ac(t) => format!("{} 🎉", JudgeStatus::Ac(t)),
-            s => format!("{s}"),
-        }
-    }
-}
-
 fn statuses_to_string(judge_statuses: &[JudgeStatus], n: usize) -> String {
     judge_statuses
         .iter()
@@ -209,16 +228,16 @@ fn overall_result(judge_statuses: &[JudgeStatus]) -> JudgeStatus {
     }
 }
 
-async fn display_result(mut receiver: Receiver<ReternMessage>) {
+async fn display_result(mut receiver: Receiver<ReternMessage>, size: usize) -> Option<JudgeStatus> {
     let number_of_cases = match receiver.recv().await {
         Some(ReternMessage::NumberOfTestCases { n }) => n,
         Some(ReternMessage::NotSuchProblem { problem_number }) => {
             println!("Not such problem: {problem_number}");
-            return;
+            return None;
         }
         Some(ReternMessage::NotSuchLang { lang }) => {
             println!("Not such language: {lang}");
-            return;
+            return None;
         }
         r => panic!("{:?}", r),
     };
@@ -250,8 +269,34 @@ async fn display_result(mut receiver: Receiver<ReternMessage>) {
         old = s;
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
-    println!(
-        "\nResult: {}",
-        overall_result(&judge_statuses).to_string_with_emoji()
-    );
+    let result = overall_result(&judge_statuses);
+    println!("\nResult: {}, {} B", result, size);
+    Some(result)
+}
+
+const NUMBER_OF_PROBLEMS: usize = 3;
+
+async fn get_submission_list() -> (Vec<Vec<Submission>>, File) {
+    fs::create_dir_all(dirs::data_local_dir().unwrap().join("mmagolf"))
+        .await
+        .unwrap();
+    let mut file = OpenOptions::new()
+        .append(true)
+        .read(true)
+        .create(true)
+        .open(dirs::data_local_dir().unwrap().join("mmagolf/submissions"))
+        .await
+        .unwrap();
+    let mut s = String::new();
+    file.read_to_string(&mut s).await.unwrap();
+    let mut submissions: Vec<_> = s
+        .lines()
+        .map(|l| Submission::from_str(l).unwrap())
+        .collect();
+    submissions.sort_by_key(|s| s.size);
+    let mut problems = vec![Vec::new(); NUMBER_OF_PROBLEMS];
+    for s in submissions {
+        problems[s.problem - 1].push(s);
+    }
+    (problems, file)
 }

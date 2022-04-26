@@ -17,5 +17,9 @@ tokio = { version = "1.17.0", features = ["full"] }
 tokio-tungstenite = "0.17.1"
 url = "2.0.0"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+futures = "0.3.21"
 erase-output = { git = "https://github.com/nanikamado/erase-output" }
 termion = "1.5.6"
+chrono = "0.4.19"
+users = "0.11.0"
+dirs = "4.0.0"
