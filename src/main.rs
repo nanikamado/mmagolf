@@ -98,10 +98,11 @@ async fn main() {
             let (sender, receiver) = channel(100);
             let submission = submit(&s.lang, problem_number, &code, ws_stream, sender);
             let display_result = display_result(receiver, s.size);
-            let (_, result, (problems, mut file)) =
+            let (_, result, (problems, n, mut file)) =
                 futures::join!(submission, display_result, submission_list);
             if matches!(result, Some(JudgeStatus::Ac(_))) {
                 file.write_all(format!("{}\n", s).as_bytes()).await.unwrap();
+                save_submission(&code, n).await;
                 match problems[problem_number - 1]
                     .get(0)
                     .map(|shortest| s.size < shortest.size)
@@ -277,7 +278,7 @@ async fn display_result(mut receiver: Receiver<ReternMessage>, size: usize) -> O
 const NUMBER_OF_PROBLEMS: usize = 3;
 const HOME_DIR: &str = env!("HOME");
 
-async fn get_submission_list() -> (Vec<Vec<Submission>>, File) {
+async fn get_submission_list() -> (Vec<Vec<Submission>>, usize, File) {
     let data_dir = std::path::Path::new(HOME_DIR).join(".local/share/mmagolf");
     fs::create_dir_all(&data_dir).await.unwrap();
     let mut file = OpenOptions::new()
@@ -293,10 +294,24 @@ async fn get_submission_list() -> (Vec<Vec<Submission>>, File) {
         .lines()
         .map(|l| Submission::from_str(l).unwrap())
         .collect();
+    let total_submission_number = submissions.len();
     submissions.sort_by_key(|s| s.size);
     let mut problems = vec![Vec::new(); NUMBER_OF_PROBLEMS];
     for s in submissions {
         problems[s.problem - 1].push(s);
     }
-    (problems, file)
+    (problems, total_submission_number, file)
+}
+
+async fn save_submission(code: &str, n: usize) {
+    let submitted_files =
+        std::path::Path::new(HOME_DIR).join(".local/share/mmagolf/submitted_files");
+    fs::create_dir_all(&submitted_files).await.unwrap();
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(submitted_files.join(n.to_string()))
+        .await
+        .unwrap();
+    file.write_all(code.as_bytes()).await.unwrap();
 }
