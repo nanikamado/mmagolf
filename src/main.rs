@@ -1,5 +1,5 @@
 use chrono::prelude::*;
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand};
 use erase_output::Erase;
 use mmagolf::{codetest, connect_to_server, submit, ReternMessage, Submission};
 use std::{fmt::Display, fs::read_to_string, io::Read, iter, process::exit};
@@ -20,26 +20,46 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Submit code
-    #[clap(arg_required_else_help = true)]
+    /// submit code
+    #[clap(
+        arg_required_else_help = true,
+        group(
+            ArgGroup::new("source")
+                .required(true)
+                .args(&["file", "code"]),
+        ),
+    )]
     Submit {
-        #[clap(short, long, value_name = "FILE")]
-        code: String,
+        /// source file
+        #[clap(short, long)]
+        file: Option<String>,
+        /// source code
+        #[clap(short, long)]
+        code: Option<String>,
+        /// language
         #[clap(short, long)]
         lang: String,
         #[clap(short, long)]
         problem_number: usize,
     },
-    /// Run the code in the judge surver to see if the code works
+    /// run the code in the judge surver to see if the code works
     #[clap(
         arg_required_else_help = true,
-        override_usage = "echo <INPUT> | mmagolf codetest --code <CODE> --lang <LANG>"
+        override_usage = "echo <INPUT> | mmagolf codetest --code <CODE> --lang <LANG>",
+        group(
+            ArgGroup::new("source")
+                .required(true)
+                .args(&["file", "code"]),
+        ),
     )]
     Codetest {
-        /// Source code
-        #[clap(short, long, value_name = "FILE")]
-        code: String,
-        /// Language
+        /// source file
+        #[clap(short, long)]
+        file: Option<String>,
+        /// source code
+        #[clap(short, long)]
+        code: Option<String>,
+        /// language
         #[clap(short, long)]
         lang: String,
     },
@@ -75,15 +95,20 @@ async fn main() {
     });
     match args.command {
         Commands::Submit {
+            file,
             code,
             lang,
             problem_number,
         } => {
             let submission_list = get_submission_list();
-            let code = read_to_string(&code).unwrap_or_else(|e| {
-                eprintln!("{}: {}", code, e);
-                exit(1)
-            });
+            let code = match (file, code) {
+                (None, Some(code)) => code,
+                (Some(file), None) => read_to_string(&file).unwrap_or_else(|e| {
+                    eprintln!("{}: {}", file, e);
+                    exit(1)
+                }),
+                _ => panic!(),
+            };
             let s = &Submission {
                 size: code.len(),
                 problem: problem_number,
@@ -112,11 +137,15 @@ async fn main() {
                 }
             }
         }
-        Commands::Codetest { code, lang } => {
-            let code = read_to_string(&code).unwrap_or_else(|e| {
-                eprintln!("{}: {}", code, e);
-                exit(1)
-            });
+        Commands::Codetest { file, code, lang } => {
+            let code = match (file, code) {
+                (None, Some(code)) => code,
+                (Some(file), None) => read_to_string(&file).unwrap_or_else(|e| {
+                    eprintln!("{}: {}", file, e);
+                    exit(1)
+                }),
+                _ => panic!(),
+            };
             let input = if atty::is(atty::Stream::Stdin) {
                 None
             } else {
