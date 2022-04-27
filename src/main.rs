@@ -45,7 +45,7 @@ enum Commands {
     /// run the code in the judge surver to see if the code works
     #[clap(
         arg_required_else_help = true,
-        override_usage = "echo <INPUT> | mmagolf codetest --code <CODE> --lang <LANG>",
+        override_usage = "echo <INPUT> | mmagolf codetest --lang <LANG> <--file <FILE>|--code <CODE>>",
         group(
             ArgGroup::new("source")
                 .required(true)
