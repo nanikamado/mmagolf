@@ -1,15 +1,29 @@
-use std::fmt::Display;
-
 use chrono::prelude::*;
 use futures_util::{SinkExt, StreamExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::fmt::Display;
 use tokio::{io::AsyncWriteExt, net::TcpStream, sync::mpsc::Sender};
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{self, protocol::Message},
     MaybeTlsStream, WebSocketStream,
 };
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Command {
+    Submit {
+        code: String,
+        lang: String,
+        problem_number: usize,
+    },
+    Codetest {
+        code: String,
+        lang: String,
+        input: Option<String>,
+    },
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all(deserialize = "snake_case"))]
@@ -122,11 +136,6 @@ pub async fn codetest(
                     }
                     _ => panic!("{:?}", data),
                 }
-                // let v: serde_json::map::Map<_, _> = serde_json::from_str(&data).unwrap();
-                // tokio::io::stdout()
-                //     .write_all(&base64::decode(v["result"].as_str().unwrap()).unwrap())
-                //     .await
-                //     .unwrap();
             }
         })
         .await;

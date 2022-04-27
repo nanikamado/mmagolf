@@ -3,6 +3,15 @@ name = "mmagolf"
 version = "0.1.0"
 edition = "2021"
 description = "Submitting tool for MMA Golf"
+default-run = "mmagolf"
+
+[[bin]]
+name = "mmagolf"
+path = "src/main.rs"
+
+[[bin]]
+name = "mmagolf-back"
+path = "src/back.rs"
 
 [features]
 localhost_server = []
