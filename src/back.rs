@@ -1,7 +1,8 @@
 use chrono::prelude::*;
 use erase_output::Erase;
-use futures::FutureExt;
+use futures::{future::join_all, FutureExt};
 use mmagolf::{codetest, connect_to_server, submit, Command, ReternMessage, Submission};
+use serde_json::json;
 use std::{fmt::Display, iter, process::exit};
 use termion::{color, style};
 use tokio::{
@@ -281,15 +282,13 @@ async fn save_submission(code: &str, n: usize) {
     file.write_all(code.as_bytes()).await.unwrap();
 }
 
+const RANK_LEN: usize = 10;
+
 async fn make_ranking(
     code: &str,
     mut submissions: Vec<Vec<Submission>>,
     new_submission: Submission,
 ) {
-    const RANK_LEN: usize = 10;
-    use futures::future::join_all;
-    use serde_json::json;
-
     let i =
         submissions[new_submission.problem - 1].partition_point(|x| x.size <= new_submission.size);
     if i > RANK_LEN {
