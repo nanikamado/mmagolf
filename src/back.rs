@@ -291,7 +291,7 @@ async fn make_ranking(
 ) {
     let i =
         submissions[new_submission.problem - 1].partition_point(|x| x.size <= new_submission.size);
-    if i > RANK_LEN {
+    if i >= RANK_LEN {
         return;
     }
     let submitted_files =
