@@ -299,23 +299,27 @@ async fn make_ranking(
     let id = new_submission.id;
     submissions[new_submission.problem - 1].insert(i, new_submission);
     let s = json!(
-        join_all(submissions.iter().map(|p| join_all(p.iter().map(|s| async {
-            let code = if s.id == id {
-                code.to_string()
-            } else {
-                fs::read_to_string(submitted_files.join(s.id.to_string()))
-                    .await
-                    .unwrap()
-            };
-            let time: DateTime<Local> = DateTime::from(s.time);
-            [
-                s.size.to_string(),
-                s.lang.clone(),
-                s.user.clone(),
-                time.format("%Y-%m-%d %H:%M:%S").to_string(),
-                code,
-            ]
-        }))))
+        join_all(
+            submissions
+                .iter()
+                .map(|p| join_all(p.iter().take(RANK_LEN).map(|s| async {
+                    let code = if s.id == id {
+                        code.to_string()
+                    } else {
+                        fs::read_to_string(submitted_files.join(s.id.to_string()))
+                            .await
+                            .unwrap()
+                    };
+                    let time: DateTime<Local> = DateTime::from(s.time);
+                    [
+                        s.size.to_string(),
+                        s.lang.clone(),
+                        s.user.clone(),
+                        time.format("%Y-%m-%d %H:%M:%S").to_string(),
+                        code,
+                    ]
+                })))
+        )
         .await
     )
     .to_string();
