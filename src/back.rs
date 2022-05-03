@@ -49,7 +49,13 @@ async fn main() {
             problem_number,
         } => {
             let submission_list = get_submission_list();
+            let (sender, receiver) = channel(100);
+            let submission = submit(&lang, problem_number, &code, ws_stream, sender);
+            let display_result = display_result(receiver, code.len());
+            let (_, result, (problems, n, mut file)) =
+                futures::join!(submission, display_result, submission_list);
             let s = &Submission {
+                id: n,
                 size: code.len(),
                 problem: problem_number,
                 lang,
@@ -60,14 +66,13 @@ async fn main() {
                     .to_string_lossy()
                     .to_string(),
             };
-            let (sender, receiver) = channel(100);
-            let submission = submit(&s.lang, problem_number, &code, ws_stream, sender);
-            let display_result = display_result(receiver, s.size);
-            let (_, result, (problems, n, mut file)) =
-                futures::join!(submission, display_result, submission_list);
             if matches!(result, Some(JudgeStatus::Ac(_))) {
-                file.write_all(format!("{}\n", s).as_bytes()).await.unwrap();
-                save_submission(&code, n).await;
+                let s_str = format!("{}\n", s);
+                let write1 = file.write_all(s_str.as_bytes());
+                let write2 = save_submission(&code, n);
+                let write3 = make_ranking(&code, problems.clone(), s.clone());
+                let (a, _, _) = futures::join!(write1, write2, write3);
+                a.unwrap();
                 match problems[problem_number - 1]
                     .get(0)
                     .map(|shortest| s.size < shortest.size)
@@ -251,10 +256,11 @@ async fn get_submission_list() -> (Vec<Vec<Submission>>, usize, File) {
     file.read_to_string(&mut s).await.unwrap();
     let mut submissions: Vec<_> = s
         .lines()
-        .map(|l| Submission::from_str(l).unwrap())
+        .enumerate()
+        .map(|(i, l)| Submission::from_str(l, i).unwrap())
         .collect();
     let total_submission_number = submissions.len();
-    submissions.sort_by_key(|s| s.size);
+    submissions.sort_unstable_by_key(|s| (s.size, s.id));
     let mut problems = vec![Vec::new(); NUMBER_OF_PROBLEMS];
     for s in submissions {
         problems[s.problem - 1].push(s);
@@ -273,4 +279,58 @@ async fn save_submission(code: &str, n: usize) {
         .await
         .unwrap();
     file.write_all(code.as_bytes()).await.unwrap();
+}
+
+async fn make_ranking(
+    code: &str,
+    mut submissions: Vec<Vec<Submission>>,
+    new_submission: Submission,
+) {
+    const RANK_LEN: usize = 10;
+    use futures::future::join_all;
+    use serde_json::json;
+
+    let i =
+        submissions[new_submission.problem - 1].partition_point(|x| x.size <= new_submission.size);
+    if i > RANK_LEN {
+        return;
+    }
+    let submitted_files =
+        std::path::Path::new(HOME_DIR).join(".local/share/mmagolf/submitted_files");
+    let id = new_submission.id;
+    submissions[new_submission.problem - 1].insert(i, new_submission);
+    let s = json!(
+        join_all(submissions.iter().map(|p| join_all(p.iter().map(|s| async {
+            let code = if s.id == id {
+                code.to_string()
+            } else {
+                fs::read_to_string(submitted_files.join(s.id.to_string()))
+                    .await
+                    .unwrap()
+            };
+            let time: DateTime<Local> = DateTime::from(s.time);
+            [
+                s.size.to_string(),
+                s.lang.clone(),
+                s.user.clone(),
+                time.format("%Y-%m-%d %H:%M:%S").to_string(),
+                code,
+            ]
+        }))))
+        .await
+    )
+    .to_string();
+    #[cfg(feature = "localhost_server")]
+    {
+        println!("{}", s);
+    }
+    #[cfg(not(feature = "localhost_server"))]
+    {
+        let c = tokio::process::Command::new("ssh")
+            .args(["webserver", "cat > ~/public_html/golf/ranking.json"])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        c.stdin.unwrap().write_all(s.as_bytes()).await.unwrap();
+    }
 }

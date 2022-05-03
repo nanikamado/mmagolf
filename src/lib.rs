@@ -150,6 +150,7 @@ pub async fn connect_to_server(
 
 #[derive(Debug, Clone)]
 pub struct Submission {
+    pub id: usize,
     pub size: usize,
     pub problem: usize,
     pub lang: String,
@@ -158,7 +159,7 @@ pub struct Submission {
 }
 
 impl Submission {
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn from_str(s: &str, n: usize) -> Option<Self> {
         let mut s = s.split_whitespace();
         let size = s.next()?.parse::<usize>().ok()?;
         let problem = s.next()?.parse::<usize>().ok()?;
@@ -166,6 +167,7 @@ impl Submission {
         let time = Utc.timestamp(s.next()?.parse::<i64>().ok()?, 0);
         let user = s.next()?.to_string();
         Some(Submission {
+            id: n,
             size,
             problem,
             lang,
