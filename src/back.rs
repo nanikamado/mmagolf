@@ -331,7 +331,7 @@ async fn make_ranking(
     }
     #[cfg(not(feature = "localhost_server"))]
     {
-        let tcp = TcpStream::connect("webserver.lxd.saga.mma.club.uec.ac.jp").unwrap();
+        let tcp = TcpStream::connect("webserver.lxd.saga.mma.club.uec.ac.jp:22").unwrap();
         let mut sess = Session::new().unwrap();
         sess.set_tcp_stream(tcp);
         sess.handshake().unwrap();
