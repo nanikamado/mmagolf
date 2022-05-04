@@ -343,7 +343,7 @@ async fn make_ranking(
         )
         .unwrap();
         // Write the file
-        let mut remote_file = sess
+        let mut ranking_json = sess
             .scp_send(
                 Path::new("/home/mado/public_html/golf/ranking.json"),
                 0o644,
@@ -351,11 +351,11 @@ async fn make_ranking(
                 None,
             )
             .unwrap();
-        remote_file.write_all(s.as_bytes()).unwrap();
-        remote_file.send_eof().unwrap();
-        remote_file.wait_eof().unwrap();
+        ranking_json.write_all(s.as_bytes()).unwrap();
+        ranking_json.send_eof().unwrap();
+        ranking_json.wait_eof().unwrap();
         // Close the channel and wait for the whole content to be tranferred
-        remote_file.close().unwrap();
-        remote_file.wait_close().unwrap();
+        ranking_json.close().unwrap();
+        ranking_json.wait_close().unwrap();
     }
 }
