@@ -3,8 +3,7 @@ use erase_output::Erase;
 use futures::{future::join_all, FutureExt};
 use mmagolf::{codetest, connect_to_server, submit, Command, ReternMessage, Submission};
 use serde_json::json;
-use ssh2::Session;
-use std::{fmt::Display, io::Write, iter, net::TcpStream, path::Path, process::exit};
+use std::{fmt::Display, iter, process::exit};
 use termion::{color, style};
 use tokio::{
     fs::{self, File, OpenOptions},
@@ -339,6 +338,8 @@ async fn make_ranking(
     }
     #[cfg(not(feature = "localhost_server"))]
     {
+        use ssh2::Session;
+        use std::{io::Write, net::TcpStream, path::Path};
         let tcp = TcpStream::connect("webserver.lxd.saga.mma.club.uec.ac.jp:22").unwrap();
         let mut sess = Session::new().unwrap();
         sess.set_tcp_stream(tcp);
