@@ -3,7 +3,8 @@ use erase_output::Erase;
 use futures::{future::join_all, FutureExt};
 use mmagolf::{codetest, connect_to_server, submit, Command, ReternMessage, Submission};
 use serde_json::json;
-use std::{fmt::Display, iter, process::exit};
+use ssh2::Session;
+use std::{fmt::Display, io::Write, iter, net::TcpStream, path::Path, process::exit};
 use termion::{color, style};
 use tokio::{
     fs::{self, File, OpenOptions},
@@ -329,11 +330,29 @@ async fn make_ranking(
     }
     #[cfg(not(feature = "localhost_server"))]
     {
-        let c = tokio::process::Command::new("ssh")
-            .args(["webserver", "cat > ~/public_html/golf/ranking.json"])
-            .stdin(std::process::Stdio::piped())
-            .spawn()
+        let tcp = TcpStream::connect("webserver.lxd.saga.mma.club.uec.ac.jp").unwrap();
+        let mut sess = Session::new().unwrap();
+        sess.set_tcp_stream(tcp);
+        sess.handshake().unwrap();
+        sess.userauth_pubkey_file(
+            "mado",
+            None,
+            &Path::new(HOME_DIR).join(".ssh/id_ed25519_web"),
+            None,
+        )
+        .unwrap();
+        // Write the file
+        let mut remote_file = sess
+            .scp_send(
+                Path::new("/home/mado/public_html/golf/ranking.json"),
+                0o644,
+                s.len() as u64,
+                None,
+            )
             .unwrap();
-        c.stdin.unwrap().write_all(s.as_bytes()).await.unwrap();
+        remote_file.write_all(s.as_bytes()).unwrap();
+        // Close the channel and wait for the whole content to be tranferred
+        remote_file.close().unwrap();
+        remote_file.wait_close().unwrap();
     }
 }
