@@ -352,6 +352,8 @@ async fn make_ranking(
             )
             .unwrap();
         remote_file.write_all(s.as_bytes()).unwrap();
+        remote_file.send_eof().unwrap();
+        remote_file.wait_eof().unwrap();
         // Close the channel and wait for the whole content to be tranferred
         remote_file.close().unwrap();
         remote_file.wait_close().unwrap();
