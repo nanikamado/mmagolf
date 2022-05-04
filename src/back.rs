@@ -311,6 +311,7 @@ async fn make_ranking(
                             .await
                             .unwrap()
                     };
+                    let code = htmlescape::encode_minimal(&code);
                     let time: DateTime<Local> = DateTime::from(s.time);
                     [
                         s.size.to_string(),
