@@ -72,12 +72,13 @@ async fn main() {
                 let s_str = format!("{}\n", s);
                 let write1 = file.write_all(s_str.as_bytes());
                 let write2 = save_submission(&code, n);
-                let write3 = make_ranking(&code, problems.clone(), s.clone());
+                let (position, submissions) = insert_submission(problems.clone(), s.clone());
+                let write3 = make_ranking(&code, &submissions, n, position);
                 let (a, _, _) = futures::join!(write1, write2, write3);
                 a.unwrap();
-                match problems[problem_number - 1]
+                match submissions[problem_number - 1]
                     .get(0)
-                    .map(|shortest| s.size < shortest.size)
+                    .map(|shortest| s.id == shortest.id)
                 {
                     None | Some(true) => println!("Shortest! 🎉"),
                     _ => (),
@@ -285,26 +286,33 @@ async fn save_submission(code: &str, n: usize) {
 
 const RANK_LEN: usize = 10;
 
-async fn make_ranking(
-    code: &str,
+fn insert_submission(
     mut submissions: Vec<Vec<Submission>>,
     new_submission: Submission,
-) {
+) -> (usize, Vec<Vec<Submission>>) {
     let i =
         submissions[new_submission.problem - 1].partition_point(|x| x.size <= new_submission.size);
-    if i >= RANK_LEN {
+    submissions[new_submission.problem - 1].insert(i, new_submission);
+    (i, submissions)
+}
+
+async fn make_ranking(
+    code: &str,
+    submissions: &[Vec<Submission>],
+    new_submission_id: usize,
+    new_submission_rank: usize,
+) {
+    if new_submission_rank >= RANK_LEN {
         return;
     }
     let submitted_files =
         std::path::Path::new(HOME_DIR).join(".local/share/mmagolf/submitted_files");
-    let id = new_submission.id;
-    submissions[new_submission.problem - 1].insert(i, new_submission);
     let s = json!(
         join_all(
             submissions
                 .iter()
                 .map(|p| join_all(p.iter().take(RANK_LEN).map(|s| async {
-                    let code = if s.id == id {
+                    let code = if s.id == new_submission_id {
                         code.to_string()
                     } else {
                         fs::read_to_string(submitted_files.join(s.id.to_string()))
