@@ -457,6 +457,7 @@ async fn feed(
                 "<code>{}</code>",
                 &code[..100.min(code.len())]
             )))
+            .content(Some(format!("<code>{}</code>", &code)))
             .pub_date(Some(i.time.to_rfc2822()))
             .link(Some(
                 "https://www.mma.club.uec.ac.jp/~mado/golf/#rank".to_string(),
