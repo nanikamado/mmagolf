@@ -440,10 +440,10 @@ async fn feed(
         })
         .flatten()
         .collect();
-    let submitted_files = stream::iter(entries.iter())
-        .fold(submitted_files, |f, s| async {
+    let (submitted_files, last_build_date) = stream::iter(entries.iter())
+        .fold((submitted_files, entries[0].time), |(f, t), s| async move {
             f.get(s.id).await;
-            f
+            (f, t.max(s.time))
         })
         .await;
     let entries: Vec<_> = join_all(entries.iter().map(|i| async {
@@ -454,6 +454,7 @@ async fn feed(
                 i.user, i.lang, i.problem, i.size
             )))
             .description(Some(code[..100.min(code.len())].to_string()))
+            .pub_date(Some(i.time.to_rfc2822()))
             .build()
     }))
     .await;
@@ -461,6 +462,7 @@ async fn feed(
         .title("Shortest更新通知")
         .link("https://www.mma.club.uec.ac.jp/~mado/golf/#rank")
         .items(entries)
+        .last_build_date(last_build_date.to_rfc2822())
         .build();
     file_sender.send(
         Path::new("/home/mado/public_html/golf/rss.xml"),
