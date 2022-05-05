@@ -463,7 +463,7 @@ async fn feed(
         .items(entries)
         .build();
     file_sender.send(
-        Path::new("/home/mado/public_html/golf/feed"),
+        Path::new("/home/mado/public_html/golf/rss.xml"),
         channel.to_string(),
     );
 }
