@@ -1,9 +1,18 @@
 use chrono::prelude::*;
 use erase_output::Erase;
-use futures::{future::join_all, FutureExt};
+use futures::{future::join_all, stream, FutureExt, StreamExt};
 use mmagolf::{codetest, connect_to_server, submit, Command, ReternMessage, Submission};
+use rss::{ChannelBuilder, ItemBuilder};
 use serde_json::json;
-use std::{fmt::Display, iter, process::exit};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    io::Write,
+    iter,
+    net::TcpStream,
+    path::{Path, PathBuf},
+    process::exit,
+};
 use termion::{color, style};
 use tokio::{
     fs::{self, File, OpenOptions},
@@ -72,7 +81,11 @@ async fn main() {
                 let write1 = file.write_all(s_str.as_bytes());
                 let write2 = save_submission(&code, n);
                 let (position, submissions) = insert_submission(problems.clone(), s.clone());
-                let write3 = make_ranking(&code, &submissions, n, position);
+                let mut submitted_files = SubmittedFiles::new(n, code.clone());
+                let file_sender = FileSender::new();
+                feed(&submissions, &mut submitted_files, &file_sender).await;
+                let write3 =
+                    make_ranking(&submissions, position, &mut submitted_files, &file_sender);
                 let (a, _, _) = futures::join!(write1, write2, write3);
                 a.unwrap();
                 match submissions[problem_number - 1]
@@ -295,29 +308,93 @@ fn insert_submission(
     (i, submissions)
 }
 
+struct SubmittedFiles {
+    path: PathBuf,
+    catch: HashMap<usize, String>,
+}
+
+impl SubmittedFiles {
+    fn new(new_submission_id: usize, new_submission_code: String) -> SubmittedFiles {
+        let mut catch = HashMap::new();
+        catch.insert(new_submission_id, new_submission_code);
+        SubmittedFiles {
+            path: std::path::Path::new(HOME_DIR).join(".local/share/mmagolf/submitted_files"),
+            catch,
+        }
+    }
+
+    async fn get(&mut self, id: usize) -> &str {
+        if self.catch.contains_key(&id) {
+            &self.catch[&id]
+        } else {
+            let code = fs::read_to_string(self.path.join(id.to_string()))
+                .await
+                .unwrap();
+            self.catch.insert(id, code);
+            &self.catch[&id]
+        }
+    }
+
+    fn get_from_catch(&self, id: usize) -> Option<&str> {
+        self.catch.get(&id).map(|s| &s[..])
+    }
+}
+
+struct FileSender {
+    sesstion: ssh2::Session,
+}
+
+impl FileSender {
+    fn new() -> Self {
+        let tcp = TcpStream::connect("webserver.lxd.saga.mma.club.uec.ac.jp:22").unwrap();
+        let mut sesstion = ssh2::Session::new().unwrap();
+        sesstion.set_tcp_stream(tcp);
+        sesstion.handshake().unwrap();
+        sesstion
+            .userauth_pubkey_file(
+                "mado",
+                None,
+                &Path::new(HOME_DIR).join(".ssh/id_ed25519_web"),
+                None,
+            )
+            .unwrap();
+        FileSender { sesstion }
+    }
+
+    fn send(&self, remote_path: &Path, contents: String) {
+        let mut f = self
+            .sesstion
+            .scp_send(remote_path, 0o644, contents.len() as u64, None)
+            .unwrap();
+        f.write_all(contents.as_bytes()).unwrap();
+        f.send_eof().unwrap();
+        f.wait_eof().unwrap();
+        f.close().unwrap();
+        f.wait_close().unwrap();
+    }
+}
+
 async fn make_ranking(
-    code: &str,
     submissions: &[Vec<Submission>],
-    new_submission_id: usize,
     new_submission_rank: usize,
+    submitted_files: &mut SubmittedFiles,
+    file_sender: &FileSender,
 ) {
     if new_submission_rank >= RANK_LEN {
         return;
     }
-    let submitted_files =
-        std::path::Path::new(HOME_DIR).join(".local/share/mmagolf/submitted_files");
+    let submitted_files = stream::iter(submissions.iter().flatten())
+        .fold(submitted_files, |f, s| async {
+            f.get(s.id).await;
+            f
+        })
+        .await;
     let s = json!(
         join_all(
             submissions
                 .iter()
                 .map(|p| join_all(p.iter().take(RANK_LEN).map(|s| async {
-                    let code = if s.id == new_submission_id {
-                        code.to_string()
-                    } else {
-                        fs::read_to_string(submitted_files.join(s.id.to_string()))
-                            .await
-                            .unwrap()
-                    };
+                    let code = submitted_files.get_from_catch(s.id).unwrap();
                     let code = htmlescape::encode_minimal(&code);
                     let time: DateTime<Local> = DateTime::from(s.time);
                     [
@@ -333,38 +410,60 @@ async fn make_ranking(
     )
     .to_string();
     #[cfg(feature = "localhost_server")]
-    {
-        println!("{}", s);
-    }
+    println!("{}", s);
     #[cfg(not(feature = "localhost_server"))]
-    {
-        use ssh2::Session;
-        use std::{io::Write, net::TcpStream, path::Path};
-        let tcp = TcpStream::connect("webserver.lxd.saga.mma.club.uec.ac.jp:22").unwrap();
-        let mut sess = Session::new().unwrap();
-        sess.set_tcp_stream(tcp);
-        sess.handshake().unwrap();
-        sess.userauth_pubkey_file(
-            "mado",
-            None,
-            &Path::new(HOME_DIR).join(".ssh/id_ed25519_web"),
-            None,
-        )
-        .unwrap();
-        // Write the file
-        let mut ranking_json = sess
-            .scp_send(
-                Path::new("/home/mado/public_html/golf/ranking.json"),
-                0o644,
-                s.len() as u64,
-                None,
-            )
-            .unwrap();
-        ranking_json.write_all(s.as_bytes()).unwrap();
-        ranking_json.send_eof().unwrap();
-        ranking_json.wait_eof().unwrap();
-        // Close the channel and wait for the whole content to be tranferred
-        ranking_json.close().unwrap();
-        ranking_json.wait_close().unwrap();
-    }
+    file_sender.send(Path::new("/home/mado/public_html/golf/ranking.json"), s);
+}
+
+async fn feed(
+    submissions: &[Vec<Submission>],
+    submitted_files: &mut SubmittedFiles,
+    file_sender: &FileSender,
+) {
+    let entries: Vec<_> = submissions
+        .iter()
+        .map(|ss| {
+            if ss.is_empty() {
+                return Vec::new();
+            }
+            let mut ss = ss.into_iter();
+            let ss_first = ss.next().unwrap();
+            let mut time = ss_first.time;
+            let mut entries = vec![ss_first];
+            for s in ss {
+                if s.time < time {
+                    time = s.time;
+                    entries.push(s);
+                }
+            }
+            entries
+        })
+        .flatten()
+        .collect();
+    let submitted_files = stream::iter(entries.iter())
+        .fold(submitted_files, |f, s| async {
+            f.get(s.id).await;
+            f
+        })
+        .await;
+    let entries: Vec<_> = join_all(entries.iter().map(|i| async {
+        let code = submitted_files.get_from_catch(i.id).unwrap();
+        ItemBuilder::default()
+            .title(Some(format!(
+                "{}が{}で問題{}のShortestを更新しました!",
+                i.user, i.lang, i.problem
+            )))
+            .description(Some(code[..100.min(code.len())].to_string()))
+            .build()
+    }))
+    .await;
+    let channel = ChannelBuilder::default()
+        .title("Shortest更新通知")
+        .link("https://www.mma.club.uec.ac.jp/~mado/golf/#rank")
+        .items(entries)
+        .build();
+    file_sender.send(
+        Path::new("/home/mado/public_html/golf/feed"),
+        channel.to_string(),
+    );
 }
