@@ -450,7 +450,7 @@ async fn feed(
         let code = submitted_files.get_from_catch(i.id).unwrap();
         ItemBuilder::default()
             .title(Some(format!(
-                "{}が{}で問題{}のShortestを更新しました！（({} B）",
+                "{}が{}で問題{}のShortestを更新しました！（{} B）",
                 i.user, i.lang, i.problem, i.size
             )))
             .description(Some(format!(
