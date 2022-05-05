@@ -455,6 +455,9 @@ async fn feed(
             )))
             .description(Some(code[..100.min(code.len())].to_string()))
             .pub_date(Some(i.time.to_rfc2822()))
+            .link(Some(
+                "https://www.mma.club.uec.ac.jp/~mado/golf/#rank".to_string(),
+            ))
             .build()
     }))
     .await;
