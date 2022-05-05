@@ -453,7 +453,10 @@ async fn feed(
                 "{}が{}で問題{}のShortestを更新しました! ({} B)",
                 i.user, i.lang, i.problem, i.size
             )))
-            .description(Some(format!("`{}`", &code[..100.min(code.len())])))
+            .description(Some(format!(
+                "<code>{}</code>",
+                &code[..100.min(code.len())]
+            )))
             .pub_date(Some(i.time.to_rfc2822()))
             .link(Some(
                 "https://www.mma.club.uec.ac.jp/~mado/golf/#rank".to_string(),
