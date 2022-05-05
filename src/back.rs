@@ -425,6 +425,7 @@ fn shortest(submission: &Submission, code: &str) {
         ))
         .username("Shortest更新通知")
         .icon_emoji(":golf:")
+        .channel("#_mado")
         .build()
         .unwrap();
     slack.send(&p).unwrap();
