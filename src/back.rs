@@ -421,7 +421,7 @@ fn shortest(submission: &Submission, code: &str) {
     let p = PayloadBuilder::new()
         .text(format!(
             "{}が{}で問題{}のShortestを更新しました！（{} B）\n```{}```",
-            submission.user, submission.problem, submission.lang, submission.size, code
+            submission.user, submission.lang, submission.problem, submission.size, code
         ))
         .username("Shortest更新通知")
         .icon_emoji(":golf:")
