@@ -2,8 +2,8 @@ use chrono::prelude::*;
 use erase_output::Erase;
 use futures::{future::join_all, stream, FutureExt, StreamExt};
 use mmagolf::{codetest, connect_to_server, submit, Command, ReternMessage, Submission};
-use rss::{ChannelBuilder, ItemBuilder};
 use serde_json::json;
+use slack_hook::{PayloadBuilder, Slack};
 use std::{
     collections::HashMap,
     fmt::Display,
@@ -83,7 +83,6 @@ async fn main() {
                 let (position, submissions) = insert_submission(problems.clone(), s.clone());
                 let mut submitted_files = SubmittedFiles::new(n, code.clone());
                 let file_sender = FileSender::new();
-                feed(&submissions, &mut submitted_files, &file_sender).await;
                 let write3 =
                     make_ranking(&submissions, position, &mut submitted_files, &file_sender);
                 let (a, _, _) = futures::join!(write1, write2, write3);
@@ -92,7 +91,7 @@ async fn main() {
                     .get(0)
                     .map(|shortest| s.id == shortest.id)
                 {
-                    None | Some(true) => println!("Shortest! 🎉"),
+                    None | Some(true) => shortest(s, &code),
                     _ => (),
                 }
             }
@@ -415,60 +414,19 @@ async fn make_ranking(
     file_sender.send(Path::new("/home/mado/public_html/golf/ranking.json"), s);
 }
 
-async fn feed(
-    submissions: &[Vec<Submission>],
-    submitted_files: &mut SubmittedFiles,
-    file_sender: &FileSender,
-) {
-    let entries: Vec<_> = submissions
-        .iter()
-        .map(|ss| {
-            if ss.is_empty() {
-                return Vec::new();
-            }
-            let mut ss = ss.into_iter();
-            let ss_first = ss.next().unwrap();
-            let mut time = ss_first.time;
-            let mut entries = vec![ss_first];
-            for s in ss {
-                if s.time < time {
-                    time = s.time;
-                    entries.push(s);
-                }
-            }
-            entries
-        })
-        .flatten()
-        .collect();
-    let (submitted_files, last_build_date) = stream::iter(entries.iter())
-        .fold((submitted_files, entries[0].time), |(f, t), s| async move {
-            f.get(s.id).await;
-            (f, t.max(s.time))
-        })
-        .await;
-    let entries: Vec<_> = join_all(entries.iter().map(|i| async {
-        let code = submitted_files.get_from_catch(i.id).unwrap();
-        ItemBuilder::default()
-            .title(Some(format!(
-                "{}が{}で問題{}のShortestを更新しました！（{} B）",
-                i.user, i.lang, i.problem, i.size
-            )))
-            .description(Some(format!("`{}`", htmlescape::encode_minimal(code))))
-            .pub_date(Some(i.time.to_rfc2822()))
-            .link(Some(
-                "https://www.mma.club.uec.ac.jp/~mado/golf/#rank".to_string(),
-            ))
-            .build()
-    }))
-    .await;
-    let channel = ChannelBuilder::default()
-        .title("Shortest更新通知")
-        .link("https://www.mma.club.uec.ac.jp/~mado/golf/#rank")
-        .items(entries)
-        .last_build_date(last_build_date.to_rfc2822())
-        .build();
-    file_sender.send(
-        Path::new("/home/mado/public_html/golf/rss.xml"),
-        channel.to_string(),
-    );
+const WEBHOOK_URL: &str = include_str!("webhook_url");
+
+fn shortest(submission: &Submission, code: &str) {
+    let slack = Slack::new(WEBHOOK_URL).unwrap();
+    let p = PayloadBuilder::new()
+        .text(format!(
+            "{}が{}で問題{}のShortestを更新しました！（{} B）\n```{}```",
+            submission.user, submission.problem, submission.lang, submission.size, code
+        ))
+        .username("Shortest更新通知")
+        .icon_emoji(":golf:")
+        .build()
+        .unwrap();
+    slack.send(&p).unwrap();
+    println!("Shortest! 🎉");
 }
