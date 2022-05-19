@@ -34,6 +34,11 @@ pub enum ReternMessage {
         time: u64,
         killed: bool,
     },
+    CompileError {
+        code: i32,
+        stdout: String,
+        stderr: String,
+    },
     CodetestResult {
         stdout: String,
         stderr: String,

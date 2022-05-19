@@ -241,6 +241,23 @@ async fn display_result(mut receiver: Receiver<ReternMessage>, size: usize) -> O
             Ok(ReternMessage::Close) => {
                 break;
             }
+            Ok(ReternMessage::CompileError {
+                code,
+                stdout,
+                stderr,
+            }) => {
+                let mut output = format!(
+                    "{}Result: Compile Error\nexit code: {}\nstdout:\n",
+                    Erase(&old),
+                    code
+                )
+                .into_bytes();
+                output.append(&mut base64::decode(stdout).unwrap());
+                output.append(&mut "stderr:\n".as_bytes().to_vec());
+                output.append(&mut base64::decode(stderr).unwrap());
+                tokio::io::stdout().write_all(&output).await.unwrap();
+                return None;
+            }
             _ => (),
         }
         let s = statuses_to_string(&judge_statuses, i);
