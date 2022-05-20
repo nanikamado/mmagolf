@@ -137,7 +137,6 @@ pub async fn codetest(
                     }
                     ReternMessage::NotSuchLang { lang } => {
                         println!("Not such language: {lang}");
-                        return;
                     }
                     _ => panic!("{:?}", data),
                 }

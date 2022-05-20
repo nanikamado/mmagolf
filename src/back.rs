@@ -80,7 +80,7 @@ async fn main() {
                 let s_str = format!("{}\n", s);
                 let write1 = file.write_all(s_str.as_bytes());
                 let write2 = save_submission(&code, n);
-                let (position, submissions) = insert_submission(problems.clone(), s.clone());
+                let (position, submissions) = insert_submission(problems, s.clone());
                 let mut submitted_files = SubmittedFiles::new(n, code.clone());
                 let file_sender = FileSender::new();
                 let write3 =
@@ -411,7 +411,7 @@ async fn make_ranking(
                 .iter()
                 .map(|p| join_all(p.iter().take(RANK_LEN).map(|s| async {
                     let code = submitted_files.get_from_catch(s.id).unwrap();
-                    let code = htmlescape::encode_minimal(&code);
+                    let code = htmlescape::encode_minimal(code);
                     let time: DateTime<Local> = DateTime::from(s.time);
                     [
                         s.size.to_string(),
