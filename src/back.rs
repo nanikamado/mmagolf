@@ -84,6 +84,7 @@ async fn main() {
                 let write1 = file.write_all(s_str.as_bytes());
                 let write2 = save_submission(&code, new_submission_id);
                 let (position, submissions) = insert_submission(problems, new_submission.clone());
+                let mut is_language_shortest = false;
                 let write3 = if language_shortests
                     .get(&(
                         new_submission.problem.to_string(),
@@ -92,6 +93,7 @@ async fn main() {
                     .map(|&shortest| new_submission.size < shortest)
                     .unwrap_or(false)
                 {
+                    is_language_shortest = true;
                     let submitted_files = SubmittedFiles::new(new_submission_id, code.clone());
                     Either::Left(make_ranking(
                         &submissions,
@@ -109,6 +111,9 @@ async fn main() {
                     .map(|shortest| new_submission.id == shortest.id)
                 {
                     None | Some(true) => shortest(new_submission, &code),
+                    _ if is_language_shortest => {
+                        println!("Shortest code in {}! 🎉", new_submission.lang)
+                    }
                     _ => (),
                 }
             }
