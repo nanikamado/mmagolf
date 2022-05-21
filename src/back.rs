@@ -1,6 +1,9 @@
 use chrono::prelude::*;
 use erase_output::Erase;
-use futures::{future::join_all, stream, FutureExt, StreamExt};
+use futures::{
+    future::{join_all, Either},
+    stream, FutureExt, StreamExt,
+};
 use mmagolf::{codetest, connect_to_server, submit, Command, ReternMessage, Submission};
 use serde_json::json;
 use slack_hook::{PayloadBuilder, Slack};
@@ -62,7 +65,7 @@ async fn main() {
             let (sender, receiver) = channel(100);
             let submission = submit(&lang, problem_number, &code, ws_stream, sender);
             let display_result = display_result(receiver, code.len());
-            let (_, result, (problems, n, mut file)) =
+            let (_, result, (problems, n, mut file, language_shortests)) =
                 futures::join!(submission, display_result, submission_list);
             let s = &Submission {
                 id: n,
@@ -81,10 +84,21 @@ async fn main() {
                 let write1 = file.write_all(s_str.as_bytes());
                 let write2 = save_submission(&code, n);
                 let (position, submissions) = insert_submission(problems, s.clone());
-                let mut submitted_files = SubmittedFiles::new(n, code.clone());
-                let file_sender = FileSender::new();
-                let write3 =
-                    make_ranking(&submissions, position, &mut submitted_files, &file_sender);
+                let write3 = if language_shortests
+                    .get(&(s.problem.to_string(), s.lang.clone()))
+                    .map(|&shortest| s.size < shortest)
+                    .unwrap_or(false)
+                {
+                    let submitted_files = SubmittedFiles::new(n, code.clone());
+                    Either::Left(make_ranking(
+                        &submissions,
+                        position,
+                        submitted_files,
+                        FileSender::new(),
+                    ))
+                } else {
+                    Either::Right(async {})
+                };
                 let (a, _, _) = futures::join!(write1, write2, write3);
                 a.unwrap();
                 match submissions[problem_number - 1]
@@ -273,7 +287,12 @@ async fn display_result(mut receiver: Receiver<ReternMessage>, size: usize) -> O
 const NUMBER_OF_PROBLEMS: usize = 3;
 const HOME_DIR: &str = env!("HOME");
 
-async fn get_submission_list() -> (Vec<Vec<Submission>>, usize, File) {
+async fn get_submission_list() -> (
+    Vec<Vec<Submission>>,
+    usize,
+    File,
+    HashMap<(String, String), usize>,
+) {
     let data_dir = std::path::Path::new(HOME_DIR).join(".local/share/mmagolf");
     fs::create_dir_all(&data_dir).await.unwrap();
     let mut file = OpenOptions::new()
@@ -285,10 +304,26 @@ async fn get_submission_list() -> (Vec<Vec<Submission>>, usize, File) {
         .unwrap();
     let mut s = String::new();
     file.read_to_string(&mut s).await.unwrap();
+    let mut language_shortest: HashMap<(String, String), usize> = HashMap::new();
     let mut submissions: Vec<_> = s
         .lines()
         .enumerate()
         .map(|(i, l)| Submission::from_str(l, i).unwrap())
+        .filter(|submission| {
+            let shortest = language_shortest
+                .get(&(submission.problem.to_string(), submission.lang.clone()))
+                .copied()
+                .unwrap_or(usize::MAX);
+            if submission.size < shortest {
+                language_shortest.insert(
+                    (submission.problem.to_string(), submission.lang.clone()),
+                    submission.size,
+                );
+                true
+            } else {
+                false
+            }
+        })
         .collect();
     let total_submission_number = submissions.len();
     submissions.sort_unstable_by_key(|s| (s.size, s.id));
@@ -296,7 +331,7 @@ async fn get_submission_list() -> (Vec<Vec<Submission>>, usize, File) {
     for s in submissions {
         problems[s.problem - 1].push(s);
     }
-    (problems, total_submission_number, file)
+    (problems, total_submission_number, file, language_shortest)
 }
 
 async fn save_submission(code: &str, n: usize) {
@@ -393,14 +428,14 @@ impl FileSender {
 async fn make_ranking(
     submissions: &[Vec<Submission>],
     new_submission_rank: usize,
-    submitted_files: &mut SubmittedFiles,
-    file_sender: &FileSender,
+    submitted_files: SubmittedFiles,
+    file_sender: FileSender,
 ) {
     if new_submission_rank >= RANK_LEN {
         return;
     }
     let submitted_files = stream::iter(submissions.iter().flatten())
-        .fold(submitted_files, |f, s| async {
+        .fold(submitted_files, |mut f, s| async {
             f.get(s.id).await;
             f
         })
