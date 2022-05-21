@@ -305,8 +305,10 @@ async fn get_submission_list() -> (
     let mut s = String::new();
     file.read_to_string(&mut s).await.unwrap();
     let mut language_shortest: HashMap<(String, String), usize> = HashMap::new();
-    let mut submissions: Vec<_> = s
-        .lines()
+    let submissions: Vec<_> = s.lines().collect();
+    let total_submission_number = submissions.len();
+    let mut submissions: Vec<_> = submissions
+        .into_iter()
         .enumerate()
         .map(|(i, l)| Submission::from_str(l, i).unwrap())
         .filter(|submission| {
@@ -325,7 +327,6 @@ async fn get_submission_list() -> (
             }
         })
         .collect();
-    let total_submission_number = submissions.len();
     submissions.sort_unstable_by_key(|s| (s.size, s.id));
     let mut problems = vec![Vec::new(); NUMBER_OF_PROBLEMS];
     for s in submissions {
