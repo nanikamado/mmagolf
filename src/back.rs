@@ -65,10 +65,10 @@ async fn main() {
             let (sender, receiver) = channel(100);
             let submission = submit(&lang, problem_number, &code, ws_stream, sender);
             let display_result = display_result(receiver, code.len());
-            let (_, result, (problems, n, mut file, language_shortests)) =
+            let (_, result, (problems, new_submission_id, mut file, language_shortests)) =
                 futures::join!(submission, display_result, submission_list);
-            let s = &Submission {
-                id: n,
+            let new_submission = &Submission {
+                id: new_submission_id,
                 size: code.len(),
                 problem: problem_number,
                 lang,
@@ -80,16 +80,19 @@ async fn main() {
                     .to_string(),
             };
             if matches!(result, Some(JudgeStatus::Ac(_))) {
-                let s_str = format!("{}\n", s);
+                let s_str = format!("{}\n", new_submission);
                 let write1 = file.write_all(s_str.as_bytes());
-                let write2 = save_submission(&code, n);
-                let (position, submissions) = insert_submission(problems, s.clone());
+                let write2 = save_submission(&code, new_submission_id);
+                let (position, submissions) = insert_submission(problems, new_submission.clone());
                 let write3 = if language_shortests
-                    .get(&(s.problem.to_string(), s.lang.clone()))
-                    .map(|&shortest| s.size < shortest)
+                    .get(&(
+                        new_submission.problem.to_string(),
+                        new_submission.lang.clone(),
+                    ))
+                    .map(|&shortest| new_submission.size < shortest)
                     .unwrap_or(false)
                 {
-                    let submitted_files = SubmittedFiles::new(n, code.clone());
+                    let submitted_files = SubmittedFiles::new(new_submission_id, code.clone());
                     Either::Left(make_ranking(
                         &submissions,
                         position,
@@ -103,9 +106,9 @@ async fn main() {
                 a.unwrap();
                 match submissions[problem_number - 1]
                     .get(0)
-                    .map(|shortest| s.id == shortest.id)
+                    .map(|shortest| new_submission.id == shortest.id)
                 {
-                    None | Some(true) => shortest(s, &code),
+                    None | Some(true) => shortest(new_submission, &code),
                     _ => (),
                 }
             }
