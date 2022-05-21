@@ -4,7 +4,9 @@ use futures::{
     future::{join_all, Either},
     stream, FutureExt, StreamExt,
 };
-use mmagolf::{codetest, connect_to_server, submit, Command, ReternMessage, Submission};
+use mmagolf::{
+    codetest, connect_to_server, display_compile_error, submit, Command, ReternMessage, Submission,
+};
 use serde_json::json;
 use slack_hook::{PayloadBuilder, Slack};
 use std::{
@@ -268,16 +270,8 @@ async fn display_result(mut receiver: Receiver<ReternMessage>, size: usize) -> O
                 stdout,
                 stderr,
             }) => {
-                let mut output = format!(
-                    "{}Result: Compile Error\nexit code: {}\nstdout:\n",
-                    Erase(&old),
-                    code
-                )
-                .into_bytes();
-                output.append(&mut base64::decode(stdout).unwrap());
-                output.append(&mut "stderr:\n".as_bytes().to_vec());
-                output.append(&mut base64::decode(stderr).unwrap());
-                tokio::io::stdout().write_all(&output).await.unwrap();
+                print!("{}", Erase(&old));
+                display_compile_error(code, stdout, stderr).await;
                 return None;
             }
             _ => (),

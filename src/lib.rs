@@ -138,6 +138,11 @@ pub async fn codetest(
                     ReternMessage::NotSuchLang { lang } => {
                         println!("Not such language: {lang}");
                     }
+                    ReternMessage::CompileError {
+                        code,
+                        stdout,
+                        stderr,
+                    } => display_compile_error(code, stdout, stderr).await,
                     _ => panic!("{:?}", data),
                 }
             }
@@ -150,6 +155,14 @@ pub async fn connect_to_server(
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, tungstenite::Error> {
     let url = url::Url::parse(&format!("ws://{}:5620", server_address)).unwrap();
     Ok(connect_async(url).await?.0)
+}
+
+pub async fn display_compile_error(code: i32, stdout: String, stderr: String) {
+    let mut output = format!("Result: Compile Error\nexit code: {}\nstdout:\n", code).into_bytes();
+    output.append(&mut base64::decode(stdout).unwrap());
+    output.append(&mut "stderr:\n".as_bytes().to_vec());
+    output.append(&mut base64::decode(stderr).unwrap());
+    tokio::io::stdout().write_all(&output).await.unwrap();
 }
 
 #[derive(Debug, Clone)]
