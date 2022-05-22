@@ -6,6 +6,7 @@ use futures::{
 };
 use mmagolf::{
     codetest, connect_to_server, display_compile_error, submit, Command, ReternMessage, Submission,
+    SubmissionResultType,
 };
 use serde_json::json;
 use slack_hook::{PayloadBuilder, Slack};
@@ -144,7 +145,7 @@ enum JudgeStatus {
     Ac(u64),
     // Mle(u64),
     Tle(u64),
-    // Re,
+    Re(u64),
     // Ole,
     // Ie,
     Wa(u64),
@@ -178,6 +179,14 @@ impl Display for JudgeStatus {
                 color::Fg(color::Reset),
                 style::Reset,
             ),
+            JudgeStatus::Re(t) => write!(
+                f,
+                "{}{}RE{}{}  {t: >7} ms",
+                style::Bold,
+                color::Fg(color::Yellow),
+                color::Fg(color::Reset),
+                style::Reset,
+            ),
             JudgeStatus::Wj => write!(f, "..."),
         }
     }
@@ -205,6 +214,7 @@ fn overall_result(judge_statuses: &[JudgeStatus]) -> JudgeStatus {
     let mut ac = false;
     let mut tle = false;
     let mut wa = false;
+    let mut re = false;
     let mut time = 0;
     for s in judge_statuses {
         match *s {
@@ -220,14 +230,23 @@ fn overall_result(judge_statuses: &[JudgeStatus]) -> JudgeStatus {
                 wa = true;
                 time = time.max(t);
             }
+            JudgeStatus::Re(t) => {
+                re = true;
+                time = time.max(t);
+            }
             JudgeStatus::Wj => panic!(),
         }
     }
-    match (ac, tle, wa) {
-        (_, _, true) => JudgeStatus::Wa(time),
-        (_, true, false) => JudgeStatus::Tle(time),
-        (true, false, false) => JudgeStatus::Ac(time),
-        (false, false, false) => panic!(),
+    if tle {
+        JudgeStatus::Tle(time)
+    } else if re {
+        JudgeStatus::Re(time)
+    } else if wa {
+        JudgeStatus::Wa(time)
+    } else if ac {
+        JudgeStatus::Ac(time)
+    } else {
+        panic!()
     }
 }
 
@@ -256,10 +275,12 @@ async fn display_result(mut receiver: Receiver<ReternMessage>, size: usize) -> O
             }) => {
                 judge_statuses[test_case_number] = if killed {
                     JudgeStatus::Tle(time)
-                } else if result {
-                    JudgeStatus::Ac(time)
                 } else {
-                    JudgeStatus::Wa(time)
+                    match result {
+                        SubmissionResultType::Ac => JudgeStatus::Ac(time),
+                        SubmissionResultType::Re => JudgeStatus::Re(time),
+                        SubmissionResultType::Wa => JudgeStatus::Wa(time),
+                    }
                 };
             }
             Ok(ReternMessage::Close) => {

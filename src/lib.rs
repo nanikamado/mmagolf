@@ -2,7 +2,7 @@ use chrono::prelude::*;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::fmt::Display;
+use std::{fmt::Display, os::unix::prelude::ExitStatusExt};
 use tokio::{io::AsyncWriteExt, net::TcpStream, sync::mpsc::Sender};
 use tokio_tungstenite::{
     connect_async,
@@ -30,7 +30,7 @@ pub enum Command {
 pub enum ReternMessage {
     SubmissionResult {
         test_case_number: usize,
-        result: bool,
+        result: SubmissionResultType,
         time: u64,
         killed: bool,
     },
@@ -44,6 +44,7 @@ pub enum ReternMessage {
         stderr: String,
         time: u64,
         killed: bool,
+        status: Option<i32>,
     },
     NumberOfTestCases {
         n: usize,
@@ -55,6 +56,14 @@ pub enum ReternMessage {
     NotSuchLang {
         lang: String,
     },
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all(deserialize = "snake_case"))]
+pub enum SubmissionResultType {
+    Ac,
+    Re,
+    Wa,
 }
 
 pub async fn submit(
@@ -121,11 +130,15 @@ pub async fn codetest(
                         time,
                         stderr,
                         killed,
+                        status,
                     } => {
                         if killed {
                             println!("TLEです。");
                         }
                         println!("time: {time} ms\nresult:");
+                        if let Some(status) = status {
+                            println!("{}", std::process::ExitStatus::from_raw(status));
+                        }
                         tokio::io::stdout()
                             .write_all(&base64::decode(stdout).unwrap())
                             .await
