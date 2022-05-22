@@ -93,7 +93,7 @@ async fn main() {
                         new_submission.lang.clone(),
                     ))
                     .map(|&shortest| new_submission.size < shortest)
-                    .unwrap_or(false)
+                    .unwrap_or(true)
                 {
                     is_language_shortest = true;
                     let submitted_files = SubmittedFiles::new(new_submission_id, code.clone());
