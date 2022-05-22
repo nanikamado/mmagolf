@@ -469,20 +469,24 @@ async fn make_ranking(
     file_sender.send(Path::new("/home/mado/public_html/golf/ranking.json"), s);
 }
 
+#[cfg(not(feature = "localhost_server"))]
 const WEBHOOK_URL: &str = include_str!("webhook_url");
 
 fn shortest(submission: &Submission, code: &str) {
-    let slack = Slack::new(WEBHOOK_URL).unwrap();
-    let p = PayloadBuilder::new()
-        .text(format!(
-            "{}が{}で問題{}のShortestを更新しました！（{} B）\n```{}```",
-            submission.user, submission.lang, submission.problem, submission.size, code
-        ))
-        .username("Shortest更新通知")
-        .icon_emoji(":golf:")
-        .channel("#_mado")
-        .build()
-        .unwrap();
-    slack.send(&p).unwrap();
+    #[cfg(not(feature = "localhost_server"))]
+    {
+        let slack = Slack::new(WEBHOOK_URL).unwrap();
+        let p = PayloadBuilder::new()
+            .text(format!(
+                "{}が{}で問題{}のShortestを更新しました！（{} B）\n```{}```",
+                submission.user, submission.lang, submission.problem, submission.size, code
+            ))
+            .username("Shortest更新通知")
+            .icon_emoji(":golf:")
+            .channel("#_mado")
+            .build()
+            .unwrap();
+        slack.send(&p).unwrap();
+    }
     println!("Shortest! 🎉");
 }
