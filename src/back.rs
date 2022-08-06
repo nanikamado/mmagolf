@@ -98,12 +98,7 @@ async fn main() {
                 {
                     is_language_shortest = true;
                     let submitted_files = SubmittedFiles::new(new_submission_id, code.clone());
-                    Either::Left(make_ranking(
-                        &submissions,
-                        position,
-                        submitted_files,
-                        FileSender::new(),
-                    ))
+                    Either::Left(make_ranking(&submissions, position, submitted_files))
                 } else {
                     Either::Right(async {})
                 };
@@ -453,7 +448,6 @@ async fn make_ranking(
     submissions: &[Vec<Submission>],
     new_submission_rank: usize,
     submitted_files: SubmittedFiles,
-    file_sender: FileSender,
 ) {
     if new_submission_rank >= RANK_LEN {
         return;
@@ -487,7 +481,7 @@ async fn make_ranking(
     #[cfg(feature = "dry_run")]
     println!("{}", s);
     #[cfg(not(feature = "dry_run"))]
-    file_sender.send(Path::new("/home/mado/public_html/golf/ranking.json"), s);
+    FileSender::new().send(Path::new("/home/mado/public_html/golf/ranking.json"), s);
 }
 
 #[cfg(not(feature = "dry_run"))]
