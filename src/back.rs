@@ -484,17 +484,17 @@ async fn make_ranking(
         .await
     )
     .to_string();
-    #[cfg(feature = "localhost_server")]
+    #[cfg(feature = "dry_run")]
     println!("{}", s);
-    #[cfg(not(feature = "localhost_server"))]
+    #[cfg(not(feature = "dry_run"))]
     file_sender.send(Path::new("/home/mado/public_html/golf/ranking.json"), s);
 }
 
-#[cfg(not(feature = "localhost_server"))]
+#[cfg(not(feature = "dry_run"))]
 const WEBHOOK_URL: &str = include_str!("webhook_url");
 
 fn shortest(submission: &Submission, code: &str) {
-    #[cfg(not(feature = "localhost_server"))]
+    #[cfg(not(feature = "dry_run"))]
     {
         let slack = Slack::new(WEBHOOK_URL).unwrap();
         let p = PayloadBuilder::new()
