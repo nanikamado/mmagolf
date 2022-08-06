@@ -35,7 +35,7 @@ enum Commands {
         #[clap(short, long)]
         lang: String,
         #[clap(short, long)]
-        problem_number: usize,
+        problem_name: String,
     },
     /// run the code in the judge surver to see if the code works
     #[clap(
@@ -89,11 +89,11 @@ impl From<Cli> for Command {
                 file,
                 code,
                 lang,
-                problem_number,
+                problem_name,
             } => Command::Submit {
                 code: code_or_file(code, file),
                 lang,
-                problem_number,
+                problem_name,
             },
             Commands::Codetest { file, code, lang } => Command::Codetest {
                 code: code_or_file(code, file),

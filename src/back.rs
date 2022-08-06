@@ -4,6 +4,7 @@ use futures::{
     future::{join_all, Either},
     stream, FutureExt, StreamExt,
 };
+use itertools::Itertools;
 use mmagolf::{
     codetest, connect_to_server, display_compile_error, submit, Command, ReternMessage, Submission,
     SubmissionResultType,
@@ -62,18 +63,18 @@ async fn main() {
         Command::Submit {
             code,
             lang,
-            problem_number,
+            problem_name,
         } => {
             let submission_list = get_submission_list();
             let (sender, receiver) = channel(100);
-            let submission = submit(&lang, problem_number, &code, ws_stream, sender);
+            let submission = submit(&lang, &problem_name, &code, ws_stream, sender);
             let display_result = display_result(receiver, code.len());
             let (_, result, (problems, new_submission_id, mut file, language_shortests)) =
                 futures::join!(submission, display_result, submission_list);
             let new_submission = &Submission {
                 id: new_submission_id,
                 size: code.len(),
-                problem: problem_number,
+                problem: problem_name,
                 lang,
                 time: Utc::now(),
                 user: get_user_by_uid(get_current_uid())
@@ -104,7 +105,7 @@ async fn main() {
                 };
                 let (a, _, _) = futures::join!(write1, write2, write3);
                 a.unwrap();
-                match submissions[problem_number - 1]
+                match submissions[&new_submission.problem]
                     .get(0)
                     .map(|shortest| new_submission.id == shortest.id)
                 {
@@ -187,31 +188,35 @@ impl Display for JudgeStatus {
     }
 }
 
-fn statuses_to_string(judge_statuses: &[JudgeStatus], n: usize) -> String {
+fn statuses_to_string<'a>(
+    judge_statuses: &'a HashMap<&'a String, JudgeStatus>,
+    test_case_number: &HashMap<&'a String, usize>,
+    n: usize,
+) -> String {
     judge_statuses
         .iter()
-        .enumerate()
-        .map(|(i, s)| {
+        .sorted_unstable_by_key(|(name, _)| test_case_number[**name])
+        .map(|(name, s)| {
             if *s == JudgeStatus::Wj {
                 format!(
-                    "Test Case {}: {}\n",
-                    i + 1,
+                    "{}: {}\n",
+                    name,
                     iter::once(".").cycle().take(n).collect::<String>()
                 )
             } else {
-                format!("Test Case {}: {s}\n", i + 1)
+                format!("{name}: {s}\n")
             }
         })
         .collect()
 }
 
-fn overall_result(judge_statuses: &[JudgeStatus]) -> JudgeStatus {
+fn overall_result(judge_statuses: &HashMap<&String, JudgeStatus>) -> JudgeStatus {
     let mut ac = false;
     let mut tle = false;
     let mut wa = false;
     let mut re = false;
     let mut time = 0;
-    for s in judge_statuses {
+    for (_, s) in judge_statuses {
         match *s {
             JudgeStatus::Ac(t) => {
                 ac = true;
@@ -246,10 +251,10 @@ fn overall_result(judge_statuses: &[JudgeStatus]) -> JudgeStatus {
 }
 
 async fn display_result(mut receiver: Receiver<ReternMessage>, size: usize) -> Option<JudgeStatus> {
-    let number_of_cases = match receiver.recv().await {
-        Some(ReternMessage::NumberOfTestCases { n }) => n,
-        Some(ReternMessage::NotSuchProblem { problem_number }) => {
-            println!("Not such problem: {problem_number}");
+    let test_case_names = match receiver.recv().await {
+        Some(ReternMessage::TestCaseNames { ns }) => ns,
+        Some(ReternMessage::NotSuchProblem { problem_name }) => {
+            println!("Not such problem: {problem_name}");
             return None;
         }
         Some(ReternMessage::NotSuchLang { lang }) => {
@@ -258,17 +263,25 @@ async fn display_result(mut receiver: Receiver<ReternMessage>, size: usize) -> O
         }
         r => panic!("{:?}", r),
     };
-    let mut judge_statuses = vec![JudgeStatus::Wj; number_of_cases];
+    let test_case_number: HashMap<&String, usize> = test_case_names
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n, i))
+        .collect();
+    let mut judge_statuses: HashMap<&String, JudgeStatus> = test_case_names
+        .iter()
+        .map(|name| (name, JudgeStatus::Wj))
+        .collect();
     let mut old = String::new();
     for i in (0..4).cycle() {
         match receiver.try_recv() {
             Ok(ReternMessage::SubmissionResult {
-                test_case_number,
+                test_case_name,
                 result,
                 time,
                 killed,
             }) => {
-                judge_statuses[test_case_number] = if killed {
+                *judge_statuses.get_mut(&test_case_name).unwrap() = if killed {
                     JudgeStatus::Tle(time)
                 } else {
                     match result {
@@ -292,7 +305,7 @@ async fn display_result(mut receiver: Receiver<ReternMessage>, size: usize) -> O
             }
             _ => (),
         }
-        let s = statuses_to_string(&judge_statuses, i);
+        let s = statuses_to_string(&judge_statuses, &test_case_number, i);
         print!("{}{}", Erase(&old), s);
         old = s;
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -302,11 +315,10 @@ async fn display_result(mut receiver: Receiver<ReternMessage>, size: usize) -> O
     Some(result)
 }
 
-const NUMBER_OF_PROBLEMS: usize = 3;
 const HOME_DIR: &str = env!("HOME");
 
 async fn get_submission_list() -> (
-    Vec<Vec<Submission>>,
+    HashMap<String, Vec<Submission>>,
     usize,
     File,
     HashMap<(String, String), usize>,
@@ -346,9 +358,9 @@ async fn get_submission_list() -> (
         })
         .collect();
     submissions.sort_unstable_by_key(|s| (s.size, s.id));
-    let mut problems = vec![Vec::new(); NUMBER_OF_PROBLEMS];
+    let mut problems: HashMap<String, Vec<Submission>> = HashMap::new();
     for s in submissions {
-        problems[s.problem - 1].push(s);
+        problems.entry(s.problem.clone()).or_default().push(s);
     }
     (problems, total_submission_number, file, language_shortest)
 }
@@ -369,13 +381,21 @@ async fn save_submission(code: &str, n: usize) {
 const RANK_LEN: usize = 10;
 
 fn insert_submission(
-    mut submissions: Vec<Vec<Submission>>,
+    mut submissions: HashMap<String, Vec<Submission>>,
     new_submission: Submission,
-) -> (usize, Vec<Vec<Submission>>) {
-    let i =
-        submissions[new_submission.problem - 1].partition_point(|x| x.size <= new_submission.size);
-    submissions[new_submission.problem - 1].insert(i, new_submission);
-    (i, submissions)
+) -> (usize, HashMap<String, Vec<Submission>>) {
+    if submissions.contains_key(&new_submission.problem) {
+        let i =
+            submissions[&new_submission.problem].partition_point(|x| x.size <= new_submission.size);
+        submissions
+            .get_mut(&new_submission.problem)
+            .unwrap()
+            .insert(i, new_submission);
+        (i, submissions)
+    } else {
+        submissions.insert(new_submission.problem.clone(), vec![new_submission]);
+        (1, submissions)
+    }
 }
 
 struct SubmittedFiles {
@@ -445,14 +465,14 @@ impl FileSender {
 }
 
 async fn make_ranking(
-    submissions: &[Vec<Submission>],
+    submissions: &HashMap<String, Vec<Submission>>,
     new_submission_rank: usize,
     submitted_files: SubmittedFiles,
 ) {
     if new_submission_rank >= RANK_LEN {
         return;
     }
-    let submitted_files = stream::iter(submissions.iter().flatten())
+    let submitted_files = stream::iter(submissions.iter().map(|(_, v)| v).flatten())
         .fold(submitted_files, |mut f, s| async {
             f.get(s.id).await;
             f
@@ -462,7 +482,7 @@ async fn make_ranking(
         join_all(
             submissions
                 .iter()
-                .map(|p| join_all(p.iter().take(RANK_LEN).map(|s| async {
+                .map(|(_, p)| join_all(p.iter().take(RANK_LEN).map(|s| async {
                     let code = submitted_files.get_from_catch(s.id).unwrap();
                     let code = htmlescape::encode_minimal(code);
                     let time: DateTime<Local> = DateTime::from(s.time);

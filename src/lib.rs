@@ -16,7 +16,7 @@ pub enum Command {
     Submit {
         code: String,
         lang: String,
-        problem_number: usize,
+        problem_name: String,
     },
     Codetest {
         code: String,
@@ -29,7 +29,7 @@ pub enum Command {
 #[serde(tag = "type", rename_all(deserialize = "snake_case"))]
 pub enum ReternMessage {
     SubmissionResult {
-        test_case_number: usize,
+        test_case_name: String,
         result: SubmissionResultType,
         time: u64,
         killed: bool,
@@ -46,12 +46,12 @@ pub enum ReternMessage {
         killed: bool,
         status: Option<i32>,
     },
-    NumberOfTestCases {
-        n: usize,
+    TestCaseNames {
+        ns: Vec<String>,
     },
     Close,
     NotSuchProblem {
-        problem_number: usize,
+        problem_name: String,
     },
     NotSuchLang {
         lang: String,
@@ -68,7 +68,7 @@ pub enum SubmissionResultType {
 
 pub async fn submit(
     lang: &str,
-    problem_number: usize,
+    probelem_name: &str,
     code: &str,
     mut ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
     sender: Sender<ReternMessage>,
@@ -78,7 +78,7 @@ pub async fn submit(
             json!({
                 "type": "submission",
                 "lang": lang,
-                "problem_number": problem_number,
+                "problem_name": probelem_name,
                 "code": code,
             })
             .to_string(),
@@ -182,7 +182,7 @@ pub async fn display_compile_error(code: i32, stdout: String, stderr: String) {
 pub struct Submission {
     pub id: usize,
     pub size: usize,
-    pub problem: usize,
+    pub problem: String,
     pub lang: String,
     pub time: DateTime<Utc>,
     pub user: String,
@@ -192,7 +192,7 @@ impl Submission {
     pub fn from_str(s: &str, n: usize) -> Option<Self> {
         let mut s = s.split_whitespace();
         let size = s.next()?.parse::<usize>().ok()?;
-        let problem = s.next()?.parse::<usize>().ok()?;
+        let problem = s.next()?.to_string();
         let lang = s.next()?.to_string();
         let time = Utc.timestamp(s.next()?.parse::<i64>().ok()?, 0);
         let user = s.next()?.to_string();
