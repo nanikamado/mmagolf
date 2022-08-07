@@ -2,7 +2,7 @@ use chrono::prelude::*;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{fmt::Display, os::unix::prelude::ExitStatusExt};
+use std::fmt::Display;
 use tokio::{io::AsyncWriteExt, net::TcpStream, sync::mpsc::Sender};
 use tokio_tungstenite::{
     connect_async,
@@ -44,7 +44,7 @@ pub enum ReternMessage {
         stderr: String,
         time: u64,
         killed: bool,
-        status: Option<i32>,
+        status: String,
     },
     TestCaseNames {
         ns: Vec<String>,
@@ -135,10 +135,8 @@ pub async fn codetest(
                         if killed {
                             println!("TLEです。");
                         }
-                        println!("time: {time} ms\nresult:");
-                        if let Some(status) = status {
-                            println!("{}", std::process::ExitStatus::from_raw(status));
-                        }
+                        println!("time: {time} ms");
+                        println!("exit status: {}", status);
                         tokio::io::stdout()
                             .write_all(&base64::decode(stdout).unwrap())
                             .await
