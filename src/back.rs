@@ -478,26 +478,25 @@ async fn make_ranking(
             f
         })
         .await;
-    let s = json!(
-        join_all(
-            submissions
-                .iter()
-                .map(|(_, p)| join_all(p.iter().take(RANK_LEN).map(|s| async {
-                    let code = submitted_files.get_from_catch(s.id).unwrap();
-                    let code = htmlescape::encode_minimal(code);
-                    let time: DateTime<Local> = DateTime::from(s.time);
-                    [
-                        s.size.to_string(),
-                        s.lang.clone(),
-                        s.user.clone(),
-                        time.format("%Y-%m-%d %H:%M:%S").to_string(),
-                        code,
-                    ]
-                })))
-        )
-        .await
-    )
-    .to_string();
+    let s: serde_json::Map<String, _> = join_all(submissions.iter().map(|(id, p)| async {
+        let ss = join_all(p.iter().take(RANK_LEN).map(|s| async {
+            let code = submitted_files.get_from_catch(s.id).unwrap();
+            let code = htmlescape::encode_minimal(code);
+            let time: DateTime<Local> = DateTime::from(s.time);
+            [
+                s.size.to_string(),
+                s.lang.clone(),
+                s.user.clone(),
+                time.format("%Y-%m-%d %H:%M:%S").to_string(),
+                code,
+            ]
+        }));
+        (id.clone(), json!(ss.await))
+    }))
+    .await
+    .into_iter()
+    .collect();
+    let s = json!(s).to_string();
     #[cfg(feature = "dry_run")]
     println!("{}", s);
     #[cfg(not(feature = "dry_run"))]
