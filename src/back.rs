@@ -512,7 +512,7 @@ fn shortest(submission: &Submission, code: &str) {
         let slack = Slack::new(WEBHOOK_URL).unwrap();
         let p = PayloadBuilder::new()
             .text(format!(
-                "{}が{}で問題{}のShortestを更新しました！（{} B）\n```{}```",
+                "{}が{}で {} のShortestを更新しました！（{} B）\n```{}```",
                 submission.user, submission.lang, submission.problem, submission.size, code
             ))
             .username("Shortest更新通知")
