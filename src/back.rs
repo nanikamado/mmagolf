@@ -64,6 +64,7 @@ async fn main() {
             code,
             lang,
             problem_name,
+            dry_run,
         } => {
             let submission_list = get_submission_list();
             let (sender, receiver) = channel(100);
@@ -103,13 +104,15 @@ async fn main() {
                 } else {
                     Either::Right(async {})
                 };
-                let (a, _, _) = futures::join!(write1, write2, write3);
-                a.unwrap();
+                if !dry_run {
+                    let (a, _, _) = futures::join!(write1, write2, write3);
+                    a.unwrap();
+                }
                 match submissions[&new_submission.problem]
                     .get(0)
                     .map(|shortest| new_submission.id == shortest.id)
                 {
-                    None | Some(true) => shortest(new_submission, &code),
+                    None | Some(true) => shortest(new_submission, &code, dry_run),
                     _ if is_language_shortest => {
                         println!("Shortest code in {}! 🎉", new_submission.lang)
                     }
@@ -506,9 +509,9 @@ async fn make_ranking(
 #[cfg(not(feature = "dry_run"))]
 const WEBHOOK_URL: &str = include_str!("webhook_url");
 
-fn shortest(submission: &Submission, code: &str) {
+fn shortest(submission: &Submission, code: &str, dry_run: bool) {
     #[cfg(not(feature = "dry_run"))]
-    {
+    if !dry_run {
         let slack = Slack::new(WEBHOOK_URL).unwrap();
         let p = PayloadBuilder::new()
             .text(format!(

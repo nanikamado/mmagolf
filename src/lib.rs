@@ -17,6 +17,7 @@ pub enum Command {
         code: String,
         lang: String,
         problem_name: String,
+        dry_run: bool,
     },
     Codetest {
         code: String,
