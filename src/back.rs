@@ -1,5 +1,6 @@
 use chrono::prelude::*;
 use erase_output::Erase;
+use file_lock::{FileLock, FileOptions};
 use futures::{
     future::{join_all, Either},
     stream, FutureExt, StreamExt,
@@ -14,7 +15,7 @@ use slack_hook::{PayloadBuilder, Slack};
 use std::{
     collections::HashMap,
     fmt::Display,
-    io::Write,
+    io::{Read, Write},
     iter,
     net::TcpStream,
     path::{Path, PathBuf},
@@ -22,9 +23,10 @@ use std::{
 };
 use termion::{color, style};
 use tokio::{
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::{AsyncReadExt, AsyncWriteExt},
     sync::mpsc::{channel, Receiver},
+    task,
 };
 use users::{get_current_uid, get_user_by_uid};
 
@@ -86,7 +88,8 @@ async fn main() {
                         .to_string(),
                 };
                 let s_str = format!("{}\n", new_submission);
-                let write1 = file.write_all(s_str.as_bytes());
+                let write1 =
+                    task::spawn_blocking(move || file.file.write_all(s_str.as_bytes()).unwrap());
                 let write2 = save_submission(&code, new_submission_id);
                 let (position, submissions) = insert_submission(problems, new_submission.clone());
                 let mut is_language_shortest = false;
@@ -323,22 +326,26 @@ const HOME_DIR: &str = env!("HOME");
 async fn get_submission_list() -> (
     HashMap<String, Vec<Submission>>,
     usize,
-    File,
+    FileLock,
     HashMap<(String, String), usize>,
 ) {
     let data_dir = std::path::Path::new(HOME_DIR).join(".local/share/mmagolf");
     fs::create_dir_all(&data_dir).await.unwrap();
-    let mut file = OpenOptions::new()
-        .append(true)
-        .read(true)
-        .create(true)
-        .open(data_dir.join("submissions"))
-        .await
-        .unwrap();
-    let mut s = String::new();
-    file.read_to_string(&mut s).await.unwrap();
-    let mut language_shortest: HashMap<(String, String), usize> = HashMap::new();
+    let file = FileOptions::new().append(true).create(true).read(true);
+    let mut file = task::spawn_blocking(move || {
+        FileLock::lock(data_dir.join("submissions"), true, file).unwrap()
+    })
+    .await
+    .unwrap();
+    let (file, s) = task::spawn_blocking(move || {
+        let mut s = String::new();
+        file.file.read_to_string(&mut s).unwrap();
+        (file, s)
+    })
+    .await
+    .unwrap();
     let submissions: Vec<_> = s.lines().collect();
+    let mut language_shortest: HashMap<(String, String), usize> = HashMap::new();
     let total_submission_number = submissions.len();
     let mut submissions: Vec<_> = submissions
         .into_iter()
