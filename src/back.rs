@@ -88,8 +88,11 @@ async fn main() {
                         .to_string(),
                 };
                 let s_str = format!("{}\n", new_submission);
-                let write1 =
-                    task::spawn_blocking(move || file.file.write_all(s_str.as_bytes()).unwrap());
+                let write1 = task::spawn_blocking(move || {
+                    if !dry_run {
+                        file.file.write_all(s_str.as_bytes()).unwrap()
+                    }
+                });
                 let write2 = save_submission(&code, new_submission_id);
                 let (position, submissions) = insert_submission(problems, new_submission.clone());
                 let mut is_language_shortest = false;
