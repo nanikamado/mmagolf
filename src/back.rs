@@ -66,25 +66,25 @@ async fn main() {
             problem_name,
             dry_run,
         } => {
-            let submission_list = get_submission_list();
             let (sender, receiver) = channel(100);
             let submission = submit(&lang, &problem_name, &code, ws_stream, sender);
             let display_result = display_result(receiver, code.len());
-            let (_, result, (problems, new_submission_id, mut file, language_shortests)) =
-                futures::join!(submission, display_result, submission_list);
-            let new_submission = &Submission {
-                id: new_submission_id,
-                size: code.len(),
-                problem: problem_name,
-                lang,
-                time: Utc::now(),
-                user: get_user_by_uid(get_current_uid())
-                    .unwrap()
-                    .name()
-                    .to_string_lossy()
-                    .to_string(),
-            };
+            let (_, result) = futures::join!(submission, display_result);
             if matches!(result, Some(JudgeStatus::Ac(_))) {
+                let (problems, new_submission_id, mut file, language_shortests) =
+                    get_submission_list().await;
+                let new_submission = &Submission {
+                    id: new_submission_id,
+                    size: code.len(),
+                    problem: problem_name,
+                    lang,
+                    time: Utc::now(),
+                    user: get_user_by_uid(get_current_uid())
+                        .unwrap()
+                        .name()
+                        .to_string_lossy()
+                        .to_string(),
+                };
                 let s_str = format!("{}\n", new_submission);
                 let write1 = file.write_all(s_str.as_bytes());
                 let write2 = save_submission(&code, new_submission_id);
