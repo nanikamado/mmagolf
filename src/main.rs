@@ -38,6 +38,8 @@ enum Commands {
         problem_name: String,
         #[clap(short, long)]
         dry_run: bool,
+        #[clap(short, long)]
+        retain_eof_newline: bool,
     },
     /// run the code in the judge surver to see if the code works
     #[clap(
@@ -93,14 +95,15 @@ impl From<Cli> for Command {
                 lang,
                 problem_name,
                 dry_run,
+                retain_eof_newline,
             } => Command::Submit {
-                code: code_or_file(code, file),
+                code: code_or_file(code, file, retain_eof_newline),
                 lang,
                 problem_name,
                 dry_run,
             },
             Commands::Codetest { file, code, lang } => Command::Codetest {
-                code: code_or_file(code, file),
+                code: code_or_file(code, file, true),
                 lang,
                 input: if atty::is(atty::Stream::Stdin) {
                     None
@@ -121,13 +124,19 @@ impl From<Cli> for Command {
     }
 }
 
-fn code_or_file(code: Option<String>, file: Option<String>) -> String {
-    match (file, code) {
+fn code_or_file(code: Option<String>, file: Option<String>, retain_eof_newline: bool) -> String {
+    let mut s = match (file, code) {
         (None, Some(code)) => code,
         (Some(file), None) => read_to_string(&file).unwrap_or_else(|e| {
             eprintln!("{}: {}", file, e);
             exit(1)
         }),
         _ => panic!(),
+    };
+    if !retain_eof_newline && s.ends_with('\n') {
+        s.pop();
+        s
+    } else {
+        s
     }
 }
